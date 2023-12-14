@@ -5,35 +5,30 @@
 #include <sys/types.h>
 #include <sys/ipc.h>
 #include <sys/msg.h>
+#include <signal.h>
 
-// Constants  
+// Constants
 #define UP_QUEUE_KEY 1111
 #define DOWN_QUEUE_KEY 2222
 #define LOG_FILE "kernel_log.txt"
 #define NUM_SLOTS 10
 #define SLOT_SIZE 64
 
-// Data structure for Disk  
+// Data structure for Disk
 typedef struct {
     char slots[NUM_SLOTS][SLOT_SIZE];
     int availableSlots;
     int clk;
 } Disk;
 
-// Define message structure  
+// Define message structure
 typedef struct {
     long mtype;  // Message type
     int slotIdentifier;  // Slot identifier for DELETE request
     char data[100];  // Data for ADD request
 } Message;
 
-// Data structure for Kernel (updated with logging functionality)
-typedef struct {
-    int clk;
-    FILE *logFile;  // File pointer for the log file
-} Kernel;
-
-// Function to initialize message queue  
+// Function to initialize message queue
 int initMessageQueue(key_t key) {
     int msqid = msgget(key, 0666 | IPC_CREAT);
     if (msqid == -1) {
@@ -43,7 +38,7 @@ int initMessageQueue(key_t key) {
     return msqid;
 }
 
-// Function to send a message to a queue  
+// Function to send a message to a queue
 void sendMessage(int msqid, long mtype, void *msg, size_t msgSize) {
     Message message;
     message.mtype = mtype;
@@ -55,7 +50,7 @@ void sendMessage(int msqid, long mtype, void *msg, size_t msgSize) {
     }
 }
 
-// Function to receive a message from a queue  
+// Function to receive a message from a queue
 void receiveMessage(int msqid, long mtype, void *msg, size_t msgSize) {
     Message message;
 
@@ -67,7 +62,7 @@ void receiveMessage(int msqid, long mtype, void *msg, size_t msgSize) {
     memcpy(msg, &message, msgSize);
 }
 
-// Function to initialize Disk  
+// Function to initialize Disk
 void initializeDisk(Disk *disk) {
     // Initialize disk data
     for (int i = 0; i < NUM_SLOTS; ++i) {
@@ -77,6 +72,16 @@ void initializeDisk(Disk *disk) {
     }
     disk->availableSlots = NUM_SLOTS;  // All slots are initially available
     disk->clk = 0;  // Initialize the clock
+}
+
+
+// Function to get request status
+void getRequestStatus(Disk *disk, Message *responseMessage, int success) {
+    if (success) {
+        responseMessage->mtype = 3;  // Success
+    } else {
+        responseMessage->mtype = 4;  // Failure
+    }
 }
 
 // Function to handle data addition to Disk
@@ -103,11 +108,7 @@ void addDataToDisk(Disk *disk, Message *msg) {
             // Update available slots and increment clock
             disk->availableSlots--;
             disk->clk++;
-        } else {
-            // Send a response indicating failure   
         }
-    } else {
-        // Send a response indicating failure   
     }
 }
 
@@ -136,93 +137,53 @@ void deleteDataFromDisk(Disk *disk, Message *msg) {
         // Update available slots and increment clock
         disk->availableSlots++;
         disk->clk++;
-    } else {
-        // Send a response indicating failure   
     }
 }
 
-// Function to handle data addition to Disk (updated without slot identifiers for data addition)
-void addDataToDisk(Disk *disk, Message *msg) {
-    // Check if there are available slots
-    if (disk->availableSlots > 0) {
-        // Find an available slot
-        int slotIndex = findAvailableSlot(disk);
-
-        if (slotIndex != -1) {
-            // Simulate latency (3 CLK cycles for addition)
-            sleep(3);
-
-            // Add data to the found slot
-            strncpy(disk->slots[slotIndex], msg->data, SLOT_SIZE);
-            disk->slots[slotIndex][SLOT_SIZE - 1] = '\0';  // Ensure null-termination
-
-            // Update available slots and increment clock
-            disk->availableSlots--;
-            disk->clk++;
-
-            // Send a response to the kernel or user process  
-            printf("Data added to slot %d\n", slotIndex);
-        } else {
-            // Send a response indicating failure   
-            printf("Data addition failed: No available slots\n");
-        }
-    } else {
-        // Send a response indicating failure   
-        printf("Data addition failed: No available slots\n");
-    }
-}
-
-// Function to handle data deletion from Disk (updated with slot identifiers)
-void deleteDataFromDisk(Disk *disk, Message *msg) {
-    // Extract slot identifier from the message
-    int slotIdentifierToDelete = msg->slotIdentifier;
-
-    // Find an available slot for compatibility with findAvailableSlot function
-    int slotIndex = findAvailableSlot(disk);
-
-    // Check if the slot index is valid
-    if (slotIndex != -1) {
-        // Simulate latency (1 CLK cycle for deletion)
-        sleep(1);
-
-        // Delete data from the specified slot
-        memset(disk->slots[slotIndex], 0, SLOT_SIZE);
-
-        // Update available slots and increment clock
-        disk->availableSlots++;
-        disk->clk++;
-
-        // Send a response to the kernel or user process   
-        printf("Data deleted from slot %d with identifier %d\n", slotIndex, slotIdentifierToDelete);
-    } else {
-
-        // Send a response indicating failure   
-        printf("Data deletion failed: No available slots\n");
-    }
-}
 
 // Function to handle Disk process
-void diskProcess(int upQueue, int downQueue) {
-
+void diskProcessHandler(int upQueue, int downQueue) {
     Disk disk;
-    Message receivedMessage;
-    Message responseMessage;
+    initializeDisk(&disk);
 
-    // The disk receives data addition/deletion request on the DOWN queue 
-    // ADD request -> mtype = 1
-    // DEL request -> mtype = 2
-    receiveMessage(upQueue, receivedMessage.mtype, &receivedMessage, sizeof(receivedMessage.data));
-    if (receivedMessage.mtype == 1) { 
-        addDataToDisk(&disk, &receivedMessage);
-    } else if (receivedMessage.mtype == 2) { 
-        deleteDataFromDisk(&disk, &receivedMessage);    // DEL FUNC SHOULD TAKE ONLY SLOT INDEX
+    while (1) {
+        // The disk receives data addition/deletion request from kernel on the DOWN queue
+        Message receivedMessage;
+        receiveMessage(downQueue, receivedMessage.mtype, &receivedMessage, sizeof(receivedMessage.data));
+
+        if (receivedMessage.mtype == 1) { // Disk received ADD request
+            addDataToDisk(&disk, &receivedMessage);
+        } else if (receivedMessage.mtype == 2) { // Disk received DEL request
+            deleteDataFromDisk(&disk, &receivedMessage);
+        }
+
+        // Respond to the kernel with the request status on the DOWN queue
+        Message responseMessage;
+        getRequestStatus(&disk, &responseMessage, 3); // 3-> success condition
+        sendMessage(downQueue, responseMessage.mtype, &responseMessage, sizeof(Message));
+
+        // The disk sends the number of available slots on UP queue to the kernel
+        Message availableSlotsMessage;
+        getRequestStatus(&disk, &availableSlotsMessage, 1);
+        sendMessage(upQueue, availableSlotsMessage.mtype, &availableSlotsMessage, sizeof(Message));
+
+        sleep(1);
     }
-    // The disk responds to the kernel data addition/deletion requests with request status (success/faliure) on the DOWN queue 
-    if(1){ //request status == success
-    sendMessage(downQueue, responseMessage.mtype, &responseMessage, sizeof(responseMessage.data));
-    }
-    // The disk sends number of avaiable slots on UP queue to the kernel
-    sendMessage(downQueue, responseMessage.mtype, &responseMessage, sizeof(responseMessage.data));
+}
+
+// Signal handler for SIGUSR1 (Disk status request)
+void sigusr1Handler(int signal, Disk *disk) {
+    // Respond to the Kernel's request for Disk status
+    // Send a message on the UP queue containing the number of available slots
+    Message availableSlotsMessage;
+    getRequestStatus(disk, &availableSlotsMessage, 1); // Appropriate success condition
+    sendMessage(UP_QUEUE_KEY, availableSlotsMessage.mtype, &availableSlotsMessage, sizeof(Message));
+}
+
+// Signal handler for SIGUSR2 (Clock synchronization)
+void sigusr2Handler(int signal, Disk *disk) {
+    // Increment the local clk variable to synchronize with the Kernel
+    disk->clk++;
 }
 
 int main() {
@@ -230,16 +191,36 @@ int main() {
     int upQueue = initMessageQueue(UP_QUEUE_KEY);
     int downQueue = initMessageQueue(DOWN_QUEUE_KEY);
 
-    // Initialize data structures
+    // Initialize Disk
     Disk disk;
-    Kernel kernel;
     initializeDisk(&disk);
-    initializeKernel(&kernel);
+
+    // Register signal handlers
+    signal(SIGUSR1, sigusr1Handler);
+    signal(SIGUSR2, sigusr2Handler);
 
     while (1) {
-        diskProcess(upQueue, downQueue);
-        // initializeKernel(&kernel);
-        sleep(1);
+        // The disk receives data addition/deletion request from kernel on the DOWN queue
+        Message receivedMessage;
+        receiveMessage(downQueue, receivedMessage.mtype, &receivedMessage, sizeof(receivedMessage.data));
+
+        if (receivedMessage.mtype == 1) { // Disk received ADD request
+            addDataToDisk(&disk, &receivedMessage);
+        } else if (receivedMessage.mtype == 2) { // Disk received DEL request
+            deleteDataFromDisk(&disk, &receivedMessage);
+        }
+
+        // Respond to the kernel with the request status on the DOWN queue
+        Message responseMessage;
+        getRequestStatus(&disk, &responseMessage, 3); // 3-> success condition
+        sendMessage(downQueue, responseMessage.mtype, &responseMessage, sizeof(Message));
+
+        // The disk sends the number of available slots on UP queue to the kernel
+        sigusr1Handler(SIGUSR1, &disk);
+
+        // Increment the clock for synchronization
+        sigusr2Handler(SIGUSR2, &disk);
+
     }
 
     return 0;
