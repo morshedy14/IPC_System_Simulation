@@ -1,0 +1,48 @@
+At time = 2, request to delete slot"0" from P1
+At time = 2,send failed to P1
+At time = 3, request to add "adham time" from P1
+At time = 3, sent status request to Disk
+At time = 3,  Disk status =  10 empty slots
+At time = 6,send success to P1
+At time = 10, request to add "hello process 2" from P2
+At time = 10, sent status request to Disk
+At time = 10,  Disk status =  8 empty slots
+At time = 13,send success to P2
+At time = 14, request to delete slot"8" from P2
+At time = 14,send failed to P2
+At time = 16, request to delete slot"0" from P1
+At time = 18,send success to P1
+At time = 19, request to add "fourth add" from P1
+At time = 19, sent status request to Disk
+At time = 19,  Disk status =  7 empty slots
+At time = 22,send success to P1
+At time = 28, request to add "hello process 3" from P3
+At time = 28, sent status request to Disk
+At time = 28,  Disk status =  5 empty slots
+At time = 31,send success to P3
+At time = 31, request to add "test add" from P3
+At time = 31, sent status request to Disk
+At time = 31,  Disk status =  3 empty slots
+At time = 34,send success to P3
+At time = 35, request to delete slot"0" from P3
+At time = 37,send success to P3
+At time = 2, request to delete slot"0" from P1
+At time = 2,send failed to P1
+At time = 4, request to add "adham time" from P1
+At time = 4, sent status request to Disk
+At time = 4,  Disk status =  10 empty slots
+At time = 7,send success to P1
+At time = 11, request to add "hello process 2" from P2
+At time = 11, sent status request to Disk
+At time = 11,  Disk status =  8 empty slots
+At time = 14,send success to P2
+At time = 14, request to delete slot"8" from P2
+At time = 14,send failed to P2
+At time = 16, request to delete slot"0" from P1
+At time = 18,send success to P1
+At time = 2, request to delete slot"0" from P1
+At time = 2,send failed to P1
+At time = 4, request to add "adham time" from P1
+At time = 4, sent status request to Disk
+At time = 4,  Disk status =  10 empty slots
+At time = 7,send success to P1
